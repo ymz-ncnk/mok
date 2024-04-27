@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"reflect"
 	"sync"
 	"testing"
 )
+
+type ReadFn func(p []byte) (n int, err error)
+type WriteToFn func(w io.Writer) (n int64, err error)
 
 func NewReaderMock() ReaderMock {
 	return ReaderMock{New("Reader")}
@@ -18,8 +20,7 @@ type ReaderMock struct {
 	*Mock
 }
 
-func (reader ReaderMock) RegisterRead(
-	fn func(p []byte) (n int, err error)) ReaderMock {
+func (reader ReaderMock) RegisterRead(fn ReadFn) ReaderMock {
 	reader.Register("Read", fn)
 	return reader
 }
@@ -35,7 +36,6 @@ func (reader ReaderMock) Read(p []byte) (n int, err error) {
 	return result[0].(int), err
 }
 
-// -----------------------------------------------------------------------------
 func NeWriterToMock() WriterToMock {
 	return WriterToMock{New("WriterTo")}
 }
@@ -45,20 +45,13 @@ type WriterToMock struct {
 	*Mock
 }
 
-func (writer WriterToMock) RegisterWriteTo(fn func(w io.Writer) (n int64,
-	err error)) WriterToMock {
+func (writer WriterToMock) RegisterWriteTo(fn WriteToFn) WriterToMock {
 	writer.Register("WriteTo", fn)
 	return writer
 }
 
 func (writer WriterToMock) WriteTo(w io.Writer) (n int64, err error) {
-	var wVal reflect.Value
-	if w == nil {
-		wVal = reflect.Zero(reflect.TypeOf((*io.Writer)(nil)).Elem())
-	} else {
-		wVal = reflect.ValueOf(w)
-	}
-	vals, err := writer.Call("WriteTo", wVal)
+	vals, err := writer.Call("WriteTo", SafeVal[io.Writer](w))
 	if err != nil {
 		return
 	}
@@ -67,7 +60,6 @@ func (writer WriterToMock) WriteTo(w io.Writer) (n int64, err error) {
 	return
 }
 
-// -----------------------------------------------------------------------------
 func TestMock(t *testing.T) {
 	t.Run("Calls ok", func(t *testing.T) {
 		var (

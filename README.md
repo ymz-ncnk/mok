@@ -19,6 +19,8 @@ package foo
 
 import "github.com/ymz-ncnk/mok"
 
+type ReadFn func(p []byte) (n int, err error)
+
 func NewReaderMock() ReaderMock {
   return ReaderMock{mok.New("Reader")}
 }
@@ -29,17 +31,14 @@ type ReaderMock struct {
   *mok.Mock
 }
 
-
 // RegisterRead registers a function as a single call to the Read() method.
-func (reader ReaderMock) RegisterRead(
-  fn func(p []byte) (n int, err error)) ReaderMock {
+func (reader ReaderMock) RegisterRead(fn ReadFn) ReaderMock {
   reader.Register("Read", fn)
   return reader
 }
 
 // RegisterNRead registers a function as n calls to the Read() method.
-func (reader ReaderMock) RegisterNRead(n int,
-  fn func(p []byte) (n int, err error)) ReaderMock {
+func (reader ReaderMock) RegisterNRead(n int, fn ReadFn) ReaderMock {
   reader.RegisterN("Read", n, fn)
   return reader
 }
@@ -211,27 +210,21 @@ Calling the `mok.Call()` method with a `nil` parameter can cause a panic like:
 To avoid this, we can pass `reflect.Value` to the `mok.Call()` function 
 instead of `nil`. For example:
 ```go
+type WriteToFn func(w io.Writer) (n int64, err error)
+
 // Mock implementation of the io.WriterTo.
 type WriterToMock struct {
   *mok.Mock
 }
 
-func (writer WriterToMock) RegisterWriteTo(fn func(w io.Writer) (n int64,
-  err error)) WriterToMock {
+func (writer WriterToMock) RegisterWriteTo(fn WriteToFn) WriterToMock {
   writer.Register("WriteTo", fn)
   return writer
 }
 
 func (writer WriterToMock) WriteTo(w io.Writer) (n int64, err error) {
-  // w param here may be nil, so we have to use reflect.Value.
-  var wVal reflect.Value
-  if w == nil {
-    wVal = reflect.Zero(reflect.TypeOf((*io.Writer)(nil)).Elem())
-  } else {
-    wVal = reflect.ValueOf(w)
-  }
-  // Call() method can accept reflect.Value too.
-  vals, err := writer.Call("WriteTo", wVal)
+  // w param here may be nil, so we may to use mok.SafeVal() function.
+  vals, err := writer.Call("WriteTo", mok.SafeVal[io.Writer](w))
     if err != nil {
     return
   }
