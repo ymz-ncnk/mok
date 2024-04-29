@@ -191,6 +191,101 @@ func TestCheckCallsFunction(t *testing.T) {
 	// test infomap[0] ...
 }
 ```
+## Concurrent invocation
+Lets create `io.Writer` mock:
+```go
+package foo
+
+import "github.com/ymz-ncnk/mok"
+
+type WriteFn func(p []byte) (n int, err error)
+
+func NewWriterMock() WriterMock {
+	return WriterMock{mok.New("Writer")}
+}
+
+type WriterMock struct {
+	*mok.Mock
+}
+
+func (m WriterMock) RegisterNWrite(n int, fn WriteFn) WriterMock {
+	m.RegisterN("Write", n, fn)
+	return m
+}
+
+func (m WriterMock) Write(p []byte) (n int, err error) {
+	result, err := m.Call("Write", p)
+	if err != nil {
+		return
+	}
+	n = result[0].(int)
+	err, _ = result[1].(error)
+	return
+}
+
+// A WriteFn wrapper that performs the function only once.
+type WriteFnWrapper struct {
+	called bool
+	fn     WriteFn
+}
+
+func (c *WriteFnWrapper) Write(p []byte) (n int, err error) {
+	if c.called {
+		err = errors.New("already called")
+		return
+	}
+	c.called = true
+	return c.fn(p)
+}
+```
+
+And test concurrent invocation of its `Write` method:
+```go
+func TestConcurrentInvocation(t *testing.T) {
+	var (
+		p1 = []byte{1}
+		p2 = []byte{2}
+
+		fn1 = &WriteFnWrapper{fn: func(p []byte) (n int, err error) {
+			return 1, nil
+		}}
+		fn2 = &WriteFnWrapper{fn: func(p []byte) (n int, err error) {
+			return 2, nil
+		}}
+
+		// When preparing for several simultaneous calls, we cannot predict their
+		// order, so we have to use RegisterN().
+		writer = NewWriterMock().RegisterNWrite(2, func(p []byte) (n int, err error) {
+			// The only thing we can do is to evaluate the input data.
+			if reflect.DeepEqual(p, p1) {
+				return fn1.Write(p)
+			}
+			if reflect.DeepEqual(p, p2) {
+				return fn2.Write(p)
+			}
+			err = errors.New("unexpected input")
+			return
+		})
+		wg = sync.WaitGroup{}
+	)
+	wg.Add(2)
+
+	go func() {
+		n, err := writer.Write(p1)
+		assert.Equal(n, 1, t)
+		assert.EqualError(err, nil, t)
+		wg.Done()
+	}()
+	go func() {
+		n, err := writer.Write(p2)
+		assert.Equal(n, 2, t)
+		assert.EqualError(err, nil, t)
+		wg.Done()
+	}()
+
+	wg.Wait()
+}
+```
 
 # Thread safety
 The mock implementation is fully thread-safe. You can register, unregister, 
