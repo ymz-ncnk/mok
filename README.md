@@ -5,8 +5,8 @@ With help of Mok you can mock any interface you want.
 Test coverage is about 90%.
 
 # How to use
-As an example, let's create a mock implementation of the `io.Reader` interface.
-Create in your home directory a `foo` folder with the following structure:
+As an example, let's mock the `io.Reader` interface. Create a `foo` folder 
+with the following structure:
 ```
 foo/
  |‒‒‒reader_mock.go
@@ -88,8 +88,8 @@ func TestSeveralCalls(t *testing.T) {
 	// Here we register several calls to the Read() method, and then call it
 	// several times as well. Each method call is just a function.
 	// If we want to register one function several times, we can use the
-	// RegisterN() method. This is especially useful when testing parallel method
-	// calls.
+	// RegisterN() method. This is especially useful when testing concurrent 
+	// method calls.
 	var (
 		reader = NewReaderMock().RegisterRead(func(p []byte) (n int, err error) {
 			p[0] = 1
