@@ -74,19 +74,21 @@ __reader_mock_test.go__
 package foo
 
 import (
+	"errors"
 	"io"
+	"reflect"
+	"sync"
 	"testing"
 
+	assert "github.com/ymz-ncnk/assert/testing_error"
 	"github.com/ymz-ncnk/mok"
 )
 
 func TestSeveralCalls(t *testing.T) {
-	// Here, we register several calls to the Read() method, and then call it
-	// several times as well.
-	// We must register all expected method calls. Each method call is just a
-	// function.
-	// If we want to register one function as several method calls, we use the
-	// RegisterN() method. This is especially useful for concurrent method
+	// Here we register several calls to the Read() method, and then call it
+	// several times as well. Each method call is just a function.
+	// If we want to register one function several times, we can use the
+	// RegisterN() method. This is especially useful when testing parallel method
 	// calls.
 	var (
 		reader = NewReaderMock().RegisterRead(func(p []byte) (n int, err error) {
@@ -104,50 +106,29 @@ func TestSeveralCalls(t *testing.T) {
 	// In total, we have registered 4 calls to the Read() method.
 
 	// First call.
-	n, err := reader.Read(b)
-	if err != nil {
-		panic(err)
-	}
+	n, _ := reader.Read(b)
 	// We expect to read 1 byte.
-	if n != 1 {
-		t.Errorf("unexpected n, want '%v', actual '%v'", 1, n)
-	}
+	assert.Equal(n, 1, t)
 	// Here we could test err and b values ...
 
 	// Second call.
-	n, err = reader.Read(b)
-	if err != nil {
-		panic(err)
-	}
+	n, _ = reader.Read(b)
 	// We expect to read 2 bytes.
-	if n != 2 {
-		t.Errorf("unexpected n, want '%v', actual '%v'", 2, n)
-	}
+	assert.Equal(n, 2, t)
 
 	// Third call.
-	_, err = reader.Read(b)
+	_, err := reader.Read(b)
 	// We expect to receive io.EOF error.
-	if err != io.EOF {
-		t.Errorf("unexpected err, want '%v', actual '%v'", io.EOF, err)
-	}
+	assert.EqualError(err, io.EOF, t)
 
 	// Forth call.
 	_, err = reader.Read(b)
 	// We expect to receive io.EOF error.
-	if err != io.EOF {
-		t.Errorf("unexpected err, want '%v', actual '%v'", io.EOF, err)
-	}
+	assert.EqualError(err, io.EOF, t)
 
 	// If we call the Read() method again, we will get mok.UnexpectedMethodCallError.
 	_, err = reader.Read(b)
-	if err == nil {
-		t.Error("unexpected nil error")
-	} else {
-		want := mok.NewUnexpectedMethodCallError("Reader", "Read")
-		if err.Error() != want.Error() {
-			t.Errorf("unexpected error, want '%v', actual '%v'", want, err)
-		}
-	}
+	assert.EqualError(err, mok.NewUnexpectedMethodCallError("Reader", "Read"), t)
 }
 
 func TestUnregisteredCall(t *testing.T) {
@@ -158,37 +139,34 @@ func TestUnregisteredCall(t *testing.T) {
 		b      []byte
 	)
 	_, err := reader.Read(b)
-	if err == nil {
-		t.Error("unexpected nil error")
-	} else {
-		want := mok.NewUnknownMethodCallError("Reader", "Read")
-		if err.Error() != want.Error() {
-			t.Errorf("unexpected error, want '%v', actual '%v'", want, err)
-		}
-	}
+	assert.EqualError(err, mok.NewUnknownMethodCallError("Reader", "Read"), t)
 }
 
 func TestCheckCallsFunction(t *testing.T) {
-	// With the mok.CheckCalls() function, we can check whether all registered
-	// method calls have been used or not.
+	// With mok.CheckCalls(), we can check whether all registered method calls
+	// have been used.
 	var (
 		reader = NewReaderMock().RegisterRead(
 			func(p []byte) (n int, err error) {
 				p[0] = 1
 				return 1, nil
 			})
-		infomap = mok.CheckCalls([]*mok.Mock{reader.Mock})
+		mocks   = []*mok.Mock{reader.Mock}
+		infomap = mok.CheckCalls(mocks)
 	)
-	if len(infomap) != 1 {
-		t.Fatal("unexpected CheckCalls result")
-	}
-	if len(infomap) != 1 {
-		t.Fatal("unexpected infomap length")
-	}
-	if len(infomap[0]) != 1 {
-		t.Fatal("number of the MethodCallsInfo not equal to 1")
-	}
-	// test infomap[0] ...
+	// We have never called reader.Read(), so infomap is not empty.
+	assert.Equal(len(infomap), 1, t)
+	// In this case infomap[0] will contain []mok.MethodCallsInfo which
+	// corresponds to the mocks[0] element.
+	assert.EqualDeep(infomap[0], []mok.MethodCallsInfo{
+		{
+			MockName:      "Reader",
+			MethodName:    "Read",
+			ExpectedCalls: 1,
+			ActualCalls:   0,
+		},
+	}, t)
+	// len(infomap) == 0 if all registered method calls have been used.
 }
 ```
 ## Concurrent invocation
