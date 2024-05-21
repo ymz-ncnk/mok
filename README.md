@@ -98,7 +98,7 @@ func TestSeveralCalls(t *testing.T) {
   // several times as well. Each method call is just a function.
   // If we want to register one function several times, we can use the
   // RegisterN() method. This is especially useful when testing concurrent 
-  // method calls.
+  // method invocations.
   var (
     reader = NewReaderMock().RegisterRead(func(p []byte) (n int, err error) {
       p[0] = 1
