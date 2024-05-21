@@ -9,7 +9,6 @@ import (
 // MethodName represents a method name.
 type MethodName string
 
-// -----------------------------------------------------------------------------
 // MethodCallsInfo holds an information about method calls.
 type MethodCallsInfo struct {
 	MockName      MockName
@@ -25,7 +24,6 @@ func (info MethodCallsInfo) String() string {
 		info.ActualCalls)
 }
 
-// -----------------------------------------------------------------------------
 // NewMethod creates new Method.
 func NewMethod() *Method {
 	return &Method{fns: []reflect.Value{}, mu: sync.Mutex{}}
@@ -39,10 +37,10 @@ type Method struct {
 }
 
 // AddMethodCall adds one method call.
-func (method *Method) AddMethodCall(fn Func) {
-	method.mu.Lock()
-	defer method.mu.Unlock()
-	method.fns = append(method.fns, reflect.ValueOf(fn))
+func (m *Method) AddMethodCall(fn Func) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.fns = append(m.fns, reflect.ValueOf(fn))
 }
 
 // Call, using reflection, calls the function that was registered as a method
@@ -50,16 +48,16 @@ func (method *Method) AddMethodCall(fn Func) {
 //
 // Returns ErrUnexpectedCall if all registered method calls have already been
 // made.
-func (method *Method) Call(params []interface{}) ([]interface{}, error) {
+func (m *Method) Call(params []interface{}) ([]interface{}, error) {
 	var fn reflect.Value
-	method.mu.Lock()
-	if len(method.fns) < method.callsCount+1 {
-		method.mu.Unlock()
+	m.mu.Lock()
+	if len(m.fns) < m.callsCount+1 {
+		m.mu.Unlock()
 		return nil, ErrUnexpectedCall
 	}
-	fn = method.fns[method.callsCount]
-	method.increaseCallsCount()
-	method.mu.Unlock()
+	fn = m.fns[m.callsCount]
+	m.increaseCallsCount()
+	m.mu.Unlock()
 
 	result := fn.Call(toReflectValues(params))
 	return fromReflectValues(result), nil
@@ -67,19 +65,19 @@ func (method *Method) Call(params []interface{}) ([]interface{}, error) {
 
 // CheckCalls checks whether all registered method calls have been
 // used. If yes, returns ok == true.
-func (method *Method) CheckCalls(mockName MockName, methodName MethodName) (
+func (m *Method) CheckCalls(mockName MockName, methodName MethodName) (
 	info MethodCallsInfo, ok bool) {
-	method.mu.Lock()
-	defer method.mu.Unlock()
-	if len(method.fns) != method.callsCount {
-		return MethodCallsInfo{mockName, methodName, len(method.fns),
-			method.callsCount}, false
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.fns) != m.callsCount {
+		return MethodCallsInfo{mockName, methodName, len(m.fns),
+			m.callsCount}, false
 	}
 	return MethodCallsInfo{}, true
 }
 
-func (method *Method) increaseCallsCount() {
-	method.callsCount++
+func (m *Method) increaseCallsCount() {
+	m.callsCount++
 }
 
 func toReflectValues(vals []interface{}) []reflect.Value {

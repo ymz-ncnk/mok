@@ -12,7 +12,6 @@ var ErrNotFunction = errors.New("not a function")
 // ErrUnexpectedCall happens during an unexpected method call.
 var ErrUnexpectedCall = errors.New("unexpected call")
 
-// -----------------------------------------------------------------------------
 // NewUnexpectedMethodCallError creates new UnexpectedMethodCallError.
 func NewUnexpectedMethodCallError(mockName MockName,
 	methodName MethodName) *UnexpectedMethodCallError {
@@ -38,7 +37,6 @@ func (err *UnexpectedMethodCallError) Error() string {
 		err.methodName)
 }
 
-// -----------------------------------------------------------------------------
 // NewUnknownMethodCallError creates new UnknownMethodCallError.
 func NewUnknownMethodCallError(mockName MockName,
 	methodName MethodName) *UnknownMethodCallError {
