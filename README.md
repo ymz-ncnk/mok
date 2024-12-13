@@ -1,4 +1,9 @@
 # Mok
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/ymz-ncnk/mok.svg)](https://pkg.go.dev/github.com/ymz-ncnk/mok)
+[![GoReportCard](https://goreportcard.com/badge/ymz-ncnk/mok)](https://goreportcard.com/report/github.com/ymz-ncnk/mok)
+[![codecov](https://codecov.io/gh/ymz-ncnk/mok/graph/badge.svg?token=8N19NXWZCQ)](https://codecov.io/gh/ymz-ncnk/mok)
+
 With help of Mok you can mock any interface you want.
 
 # Contents
