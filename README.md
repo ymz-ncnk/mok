@@ -9,14 +9,10 @@ With help of Mok you can mock any interface you want.
 # Contents
 - [Mok](#mok)
 - [Contents](#contents)
-- [Tests](#tests)
 - [How to use](#how-to-use)
   - [Concurrent invocation](#concurrent-invocation)
 - [Thread safety](#thread-safety)
 - [Mock implementation caveats](#mock-implementation-caveats)
-
-# Tests
-Test coverage is about 90%.
 
 # How to use
 As an example, let's mock the `io.Reader` interface. Create a `foo` folder 
