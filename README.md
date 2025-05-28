@@ -10,9 +10,8 @@ With help of Mok you can mock any interface you want.
 - [Mok](#mok)
 - [Contents](#contents)
 - [How to use](#how-to-use)
-  - [Concurrent invocation](#concurrent-invocation)
-- [Thread safety](#thread-safety)
-- [Mock implementation caveats](#mock-implementation-caveats)
+- [Concurrent Invocations](#concurrent-invocations)
+- [Thread Safety](#thread-safety)
 
 # How to use
 As an example, let's mock the `io.Reader` interface. Create a `foo` folder 
@@ -66,6 +65,14 @@ func (m ReaderMock) Read(p []byte) (n int, err error) {
   if err != nil {
     return
   }
+  // To safely call m.Call() with a possibly nil value, without triggering:
+  // 
+  //   panic: reflect: Call using zero Value argument
+  //
+  // , use the mok.SafeVal() helper. For example:
+  //
+  //   ... := m.Call("WriteTo", mok.SafeVal[io.Writer](w))
+
   n = result[0].(int)
   err, _ = result[1].(error)
   return
@@ -101,16 +108,22 @@ func TestSeveralCalls(t *testing.T) {
   // RegisterN() method. This is especially useful when testing concurrent 
   // method invocations.
   var (
-    reader = NewReaderMock().RegisterRead(func(p []byte) (n int, err error) {
-      p[0] = 1
-      return 1, nil
-    }).RegisterRead(func(p []byte) (n int, err error) {
-      p[0] = 2
-      p[1] = 2
-      return 2, nil
-    }).RegisterNRead(2, func(p []byte) (n int, err error) {
-      return 0, io.EOF
-    })
+    reader = NewReaderMock().RegisterRead(
+      func(p []byte) (n int, err error) {
+        p[0] = 1
+        return 1, nil
+      },
+    ).RegisterRead(
+      func(p []byte) (n int, err error) {
+        p[0] = 2
+        p[1] = 2
+        return 2, nil
+      },
+    ).RegisterNRead(2, 
+      func(p []byte) (n int, err error) {
+        return 0, io.EOF
+      },
+    )
     b = make([]byte, 2)
   )
   // In total, we have registered 4 calls to the Read() method.
@@ -160,7 +173,8 @@ func TestCheckCallsFunction(t *testing.T) {
       func(p []byte) (n int, err error) {
         p[0] = 1
         return 1, nil
-      })
+      },
+    )
     mocks   = []*mok.Mock{reader.Mock}
     infomap = mok.CheckCalls(mocks)
   )
@@ -179,134 +193,24 @@ func TestCheckCallsFunction(t *testing.T) {
   // len(infomap) == 0 if all registered method calls have been used.
 }
 ```
-## Concurrent invocation
-To practice a little more, let's create an `io.Writer` mock:
+# Concurrent Invocations
+Mocking a method for several concurrent invocations, using, for example:
 ```go
-package foo
-
-import "github.com/ymz-ncnk/mok"
-
-type WriteFn func(p []byte) (n int, err error)
-
-func NewWriterMock() WriterMock {
-  return WriterMock{mok.New("Writer")}
-}
-
-type WriterMock struct {
-  *mok.Mock
-}
-
-func (m WriterMock) RegisterNWrite(n int, fn WriteFn) WriterMock {
-  m.RegisterN("Write", n, fn)
-  return m
-}
-
-func (m WriterMock) Write(p []byte) (n int, err error) {
-  result, err := m.Call("Write", p)
-  if err != nil {
-    return
-  }
-  n = result[0].(int)
-  err, _ = result[1].(error)
-  return
-}
-
-// WriteFn wrapper, performs the function only once.
-type WriteFnWrapper struct {
-  called bool
-  fn     WriteFn
-}
-
-func (c *WriteFnWrapper) Write(p []byte) (n int, err error) {
-  if c.called {
-    err = errors.New("already called")
-    return
-  }
-  c.called = true
-  return c.fn(p)
-}
+mock.RegisterWrite(
+  func() { ... },
+).RegisterWrite(
+  func() { ... },
+)
 ```
-
-And test concurrent invocation of its `Write` method:
+will not work, because the invocation order is not guaranteed. Instead, use 
+`RegisterN()`:
 ```go
-func TestConcurrentInvocation(t *testing.T) {
-  var (
-    p1 = []byte{1}
-    p2 = []byte{2}
-
-    fn1 = &WriteFnWrapper{fn: func(p []byte) (n int, err error) {
-      return 1, nil
-    }}
-    fn2 = &WriteFnWrapper{fn: func(p []byte) (n int, err error) {
-      return 2, nil
-    }}
-
-    // When preparing for several simultaneous calls, we cannot predict their
-    // order, so we have to use RegisterN().
-    writer = NewWriterMock().RegisterNWrite(2, func(p []byte) (n int, err error) {
-      // The only thing we can do is to evaluate the input data.
-      if reflect.DeepEqual(p, p1) {
-        return fn1.Write(p)
-      }
-      if reflect.DeepEqual(p, p2) {
-        return fn2.Write(p)
-      }
-      err = errors.New("unexpected input")
-      return
-    })
-    wg = sync.WaitGroup{}
-  )
-  wg.Add(2)
-
-  go func() {
-    n, err := writer.Write(p1)
-    assert.Equal(n, 1, t)
-    assert.EqualError(err, nil, t)
-    wg.Done()
-  }()
-  go func() {
-    n, err := writer.Write(p2)
-    assert.Equal(n, 2, t)
-    assert.EqualError(err, nil, t)
-    wg.Done()
-  }()
-
-  wg.Wait()
-}
+mock.RegisterNWrite(2, 
+  func() { ... },
+)
 ```
+which registers a single function for two method calls.
 
-# Thread safety
+# Thread Safety
 The mock implementation is fully thread-safe. You can register, unregister, 
 call methods, and check the number of calls simultaneously.
-
-# Mock implementation caveats
-Calling the `mok.Call()` method with a `nil` parameter can cause a panic like:
-```
-  panic: reflect: Call using zero Value argument
-  ...
-```
-To avoid this, we can use `mok.SafeVal()` function:
-```go
-type WriteToFn func(w io.Writer) (n int64, err error)
-
-// Mock implementation of the io.WriterTo.
-type WriterToMock struct {
-  *mok.Mock
-}
-
-func (m WriterToMock) RegisterWriteTo(fn WriteToFn) WriterToMock {
-  m.Register("WriteTo", fn)
-  return m
-}
-
-func (m WriterToMock) WriteTo(w io.Writer) (n int64, err error) {
-  // w param here may be nil, so we have to use mok.SafeVal() function.
-  vals, err := m.Call("WriteTo", mok.SafeVal[io.Writer](w))
-    if err != nil {
-    return
-  }
-  n = vals[0].(int64)
-  err, _ = vals[1].(error)
-  return
-}
-```
