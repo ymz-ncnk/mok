@@ -10,7 +10,7 @@ import (
 type MockName string
 
 // Func represents one method call, should be a function.
-type Func interface{}
+type Func any
 
 // New creates new Mock.
 func New(name MockName) *Mock {
@@ -54,8 +54,7 @@ func (m *Mock) Unregister(name MethodName) *Mock {
 // Returns UnknownMethodCallError if no calls was registered,
 // UnexpectedMethodCallError - if all registered method calls have already been
 // made.
-func (m *Mock) Call(name MethodName, params ...interface{}) (
-	[]interface{}, error) {
+func (m *Mock) Call(name MethodName, params ...any) ([]any, error) {
 	method, pst := m.syncMap.Load(name)
 	if !pst {
 		return nil, NewUnknownMethodCallError(m.name, name)
@@ -87,6 +86,6 @@ func (m *Mock) CheckCalls() []MethodCallsInfo {
 	return arr
 }
 
-func isFunc(v interface{}) bool {
+func isFunc(v any) bool {
 	return reflect.TypeOf(v).Kind() == reflect.Func
 }
