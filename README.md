@@ -91,103 +91,103 @@ __reader_mock_test.go__
 package foo
 
 import (
-	"io"
-	"testing"
+  "io"
+  "testing"
 
-	asserterror "github.com/ymz-ncnk/assert/error"
-	"github.com/ymz-ncnk/mok"
+  asserterror "github.com/ymz-ncnk/assert/error"
+  "github.com/ymz-ncnk/mok"
 )
 
 func TestSeveralCalls(t *testing.T) {
-	// Here we register several calls to the Read() method, and then call it
-	// several times as well. Each method call is just a function.
-	// If we want to register one function several times, we can use the
-	// RegisterN() method. This is especially useful when testing concurrent
-	// method invocations.
-	var (
-		reader = NewReaderMock().RegisterRead(
-			func(p []byte) (n int, err error) {
-				p[0] = 1
-				return 1, nil
-			},
-		).RegisterRead(
-			func(p []byte) (n int, err error) {
-				p[0] = 2
-				p[1] = 2
-				return 2, nil
-			},
-		).RegisterNRead(2,
-			func(p []byte) (n int, err error) {
-				return 0, io.EOF
-			},
-		)
-		b = make([]byte, 2)
-	)
-	// In total, we have registered 4 calls to the Read() method.
+  // Here we register several calls to the Read() method, and then call it
+  // several times as well. Each method call is just a function.
+  // If we want to register one function several times, we can use the
+  // RegisterN() method. This is especially useful when testing concurrent
+  // method invocations.
+  var (
+    reader = NewReaderMock().RegisterRead(
+      func(p []byte) (n int, err error) {
+        p[0] = 1
+        return 1, nil
+      },
+    ).RegisterRead(
+      func(p []byte) (n int, err error) {
+        p[0] = 2
+        p[1] = 2
+        return 2, nil
+      },
+    ).RegisterNRead(2,
+      func(p []byte) (n int, err error) {
+        return 0, io.EOF
+      },
+    )
+    b = make([]byte, 2)
+  )
+  // In total, we have registered 4 calls to the Read() method.
 
-	// First call.
-	n, _ := reader.Read(b)
-	// We expect to read 1 byte.
-	asserterror.Equal(n, 1, t)
-	// Here we could test err and b values ...
+  // First call.
+  n, _ := reader.Read(b)
+  // We expect to read 1 byte.
+  asserterror.Equal(n, 1, t)
+  // Here we could test err and b values ...
 
-	// Second call.
-	n, _ = reader.Read(b)
-	// We expect to read 2 bytes.
-	asserterror.Equal(n, 2, t)
+  // Second call.
+  n, _ = reader.Read(b)
+  // We expect to read 2 bytes.
+  asserterror.Equal(n, 2, t)
 
-	// Third call.
-	_, err := reader.Read(b)
-	// We expect to receive io.EOF error.
-	asserterror.EqualError(err, io.EOF, t)
+  // Third call.
+  _, err := reader.Read(b)
+  // We expect to receive io.EOF error.
+  asserterror.EqualError(err, io.EOF, t)
 
-	// Forth call.
-	_, err = reader.Read(b)
-	// We expect to receive io.EOF error.
-	asserterror.EqualError(err, io.EOF, t)
+  // Forth call.
+  _, err = reader.Read(b)
+  // We expect to receive io.EOF error.
+  asserterror.EqualError(err, io.EOF, t)
 
-	// If we call the Read() method again, we will get mok.UnexpectedMethodCallError.
-	_, err = reader.Read(b)
-	asserterror.EqualError(err, mok.NewUnexpectedMethodCallError("Reader", "Read"), t)
+  // If we call the Read() method again, we will get mok.UnexpectedMethodCallError.
+  _, err = reader.Read(b)
+  asserterror.EqualError(err, mok.NewUnexpectedMethodCallError("Reader", "Read"), t)
 }
 
 func TestUnregisteredCall(t *testing.T) {
-	// If we call a method without registered calls, we will get
-	// mok.UnknownMethodCallError.
-	var (
-		reader = NewReaderMock()
-		b      []byte
-	)
-	_, err := reader.Read(b)
-	asserterror.EqualError(err, mok.NewUnknownMethodCallError("Reader", "Read"), t)
+  // If we call a method without registered calls, we will get
+  // mok.UnknownMethodCallError.
+  var (
+    reader = NewReaderMock()
+    b      []byte
+  )
+  _, err := reader.Read(b)
+  asserterror.EqualError(err, mok.NewUnknownMethodCallError("Reader", "Read"), t)
 }
 
 func TestCheckCallsFunction(t *testing.T) {
-	// With mok.CheckCalls(), we can check whether all registered method calls
-	// have been used.
-	var (
-		reader = NewReaderMock().RegisterRead(
-			func(p []byte) (n int, err error) {
-				p[0] = 1
-				return 1, nil
-			},
-		)
-		mocks   = []*mok.Mock{reader.Mock}
-		infomap = mok.CheckCalls(mocks)
-	)
-	// We have never called reader.Read(), so infomap is not empty.
-	asserterror.Equal(len(infomap), 1, t)
-	// In this case infomap[0] will contain []mok.MethodCallsInfo which
-	// corresponds to the mocks[0] element.
-	asserterror.EqualDeep(infomap[0], []mok.MethodCallsInfo{
-		{
-			MockName:      "Reader",
-			MethodName:    "Read",
-			ExpectedCalls: 1,
-			ActualCalls:   0,
-		},
-	}, t)
-	// len(infomap) == 0 if all registered method calls have been used.
+  // With mok.CheckCalls(), we can check whether all registered method calls
+  // have been used.
+  var (
+    reader = NewReaderMock().RegisterRead(
+      func(p []byte) (n int, err error) {
+        p[0] = 1
+        return 1, nil
+      },
+    )
+    mocks   = []*mok.Mock{reader.Mock}
+    infomap = mok.CheckCalls(mocks)
+  )
+  // We have never called reader.Read(), so infomap is not empty.
+  asserterror.Equal(len(infomap), 1, t)
+  // In this case infomap[0] will contain []mok.MethodCallsInfo which
+  // corresponds to the mocks[0] element.
+  asserterror.EqualDeep(infomap[0], []mok.MethodCallsInfo{
+    {
+      MockName:      "Reader",
+      MethodName:    "Read",
+      ExpectedCalls: 1,
+      ActualCalls:   0,
+    },
+  }, t)
+  // len(infomap) == 0 if all registered method calls have been used.
 }
 ```
 # Concurrent Invocations
