@@ -48,7 +48,7 @@ func (m *Method) AddMethodCall(fn Func) {
 //
 // Returns ErrUnexpectedCall if all registered method calls have already been
 // made.
-func (m *Method) Call(params []interface{}) ([]interface{}, error) {
+func (m *Method) Call(params []any) ([]any, error) {
 	var fn reflect.Value
 	m.mu.Lock()
 	if len(m.fns) < m.callsCount+1 {
@@ -58,8 +58,15 @@ func (m *Method) Call(params []interface{}) ([]interface{}, error) {
 	fn = m.fns[m.callsCount]
 	m.increaseCallsCount()
 	m.mu.Unlock()
-
-	result := fn.Call(toReflectValues(params))
+	var (
+		result []reflect.Value
+		vals   = toReflectValues(params)
+	)
+	if fn.Type().IsVariadic() && vals[len(vals)-1].Kind() == reflect.Slice {
+		result = fn.CallSlice(vals)
+	} else {
+		result = fn.Call(vals)
+	}
 	return fromReflectValues(result), nil
 }
 
@@ -80,7 +87,7 @@ func (m *Method) increaseCallsCount() {
 	m.callsCount++
 }
 
-func toReflectValues(vals []interface{}) []reflect.Value {
+func toReflectValues(vals []any) []reflect.Value {
 	rvals := make([]reflect.Value, len(vals))
 	for i := 0; i < len(vals); i++ {
 		if rval, ok := vals[i].(reflect.Value); ok {
@@ -92,8 +99,8 @@ func toReflectValues(vals []interface{}) []reflect.Value {
 	return rvals
 }
 
-func fromReflectValues(rvals []reflect.Value) []interface{} {
-	vals := make([]interface{}, len(rvals))
+func fromReflectValues(rvals []reflect.Value) []any {
+	vals := make([]any, len(rvals))
 	for i := 0; i < len(vals); i++ {
 		vals[i] = rvals[i].Interface()
 	}
