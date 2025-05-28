@@ -74,7 +74,7 @@ func (m *Mock) Call(name MethodName, params ...any) ([]any, error) {
 // used. If yes, returns an empty slice.
 func (m *Mock) CheckCalls() []MethodCallsInfo {
 	arr := []MethodCallsInfo{}
-	m.syncMap.Range(func(key, value interface{}) bool {
+	m.syncMap.Range(func(key, value any) bool {
 		methodName := key.(MethodName)
 		method := value.(*Method)
 		info, ok := method.CheckCalls(m.name, methodName)

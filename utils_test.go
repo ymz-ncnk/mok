@@ -1,35 +1,37 @@
-package mok
+package mok_test
 
 import (
 	"fmt"
 	"testing"
+
+	asserterror "github.com/ymz-ncnk/assert/error"
+	"github.com/ymz-ncnk/mok"
+	"github.com/ymz-ncnk/mok/testdata"
 )
 
 func TestCheckCalls(t *testing.T) {
-	reader := NewReaderMock()
-	reader.RegisterRead(func(p []byte) (n int, err error) {
-		return 0, nil
-	})
-	reader.RegisterRead(func(p []byte) (n int, err error) {
-		return 1, nil
-	})
+	reader := testdata.NewReaderMock().RegisterRead(
+		func(p []byte) (n int, err error) {
+			return 0, nil
+		},
+	).RegisterRead(
+		func(p []byte) (n int, err error) {
+			return 1, nil
+		},
+	)
 	reader.Read([]byte{})
-	arr := reader.CheckCalls()
-	if len(arr) != 1 {
-		t.Error("unexpected CheckCalls result")
-	}
+	arr := reader.Mock.CheckCalls()
+	asserterror.Equal(len(arr), 1, t)
+
 	err := checkMethodCallsInfo(arr[0], 2, 1)
-	if err != nil {
-		t.Error(err)
-	}
+	asserterror.EqualError(err, nil, t)
+
 	reader.Read(nil)
-	arr = reader.CheckCalls()
-	if len(arr) != 0 {
-		t.Error("unexpected CheckCalls result")
-	}
+	arr = reader.Mock.CheckCalls()
+	asserterror.Equal(len(arr), 0, t)
 }
 
-func checkMethodCallsInfo(info MethodCallsInfo, expectedCalls,
+func checkMethodCallsInfo(info mok.MethodCallsInfo, expectedCalls,
 	actualCalls int) error {
 	if info.MockName != "Reader" {
 		return fmt.Errorf("unexpected MockName, want '%v' actual '%v'",

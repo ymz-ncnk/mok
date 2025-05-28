@@ -1,4 +1,4 @@
-package mok
+package mok_test
 
 import (
 	"bytes"
@@ -6,66 +6,19 @@ import (
 	"io"
 	"sync"
 	"testing"
+
+	asserterror "github.com/ymz-ncnk/assert/error"
+	"github.com/ymz-ncnk/mok"
+	"github.com/ymz-ncnk/mok/testdata"
 )
 
-type ReadFn func(p []byte) (n int, err error)
-type WriteToFn func(w io.Writer) (n int64, err error)
+func TestMok(t *testing.T) {
 
-func NewReaderMock() ReaderMock {
-	return ReaderMock{New("Reader")}
-}
-
-// Mock implementation of the io.Reader interface.
-type ReaderMock struct {
-	*Mock
-}
-
-func (reader ReaderMock) RegisterRead(fn ReadFn) ReaderMock {
-	reader.Register("Read", fn)
-	return reader
-}
-
-func (reader ReaderMock) Read(p []byte) (n int, err error) {
-	result, err := reader.Call("Read", p)
-	if err != nil {
-		return 0, err
-	}
-	if result[1] != nil {
-		err = result[1].(error)
-	}
-	return result[0].(int), err
-}
-
-func NeWriterToMock() WriterToMock {
-	return WriterToMock{New("WriterTo")}
-}
-
-// Mock implementation of the io.WriterTo interface.
-type WriterToMock struct {
-	*Mock
-}
-
-func (writer WriterToMock) RegisterWriteTo(fn WriteToFn) WriterToMock {
-	writer.Register("WriteTo", fn)
-	return writer
-}
-
-func (writer WriterToMock) WriteTo(w io.Writer) (n int64, err error) {
-	vals, err := writer.Call("WriteTo", SafeVal[io.Writer](w))
-	if err != nil {
-		return
-	}
-	n = vals[0].(int64)
-	err, _ = vals[1].(error)
-	return
-}
-
-func TestMock(t *testing.T) {
 	t.Run("Calls ok", func(t *testing.T) {
 		var (
 			wantNum1 = 1
-			wantNum2 = errors.New("unexpeted param")
-			reader   = NewReaderMock().RegisterRead(
+			wantErr2 = errors.New("unexpeted param")
+			reader   = testdata.NewReaderMock().RegisterRead(
 				func(p []byte) (n int, err error) {
 					if !bytes.Equal(p, []byte{1, 2, 3}) {
 						return 0, errors.New("unexpeted param")
@@ -75,110 +28,76 @@ func TestMock(t *testing.T) {
 			).RegisterRead(
 				func(p []byte) (n int, err error) {
 					if !bytes.Equal(p, []byte{4, 5}) {
-						return 0, wantNum2
+						return 0, wantErr2
 					}
 					return 2, nil
 				},
 			)
 		)
-
 		n, err := reader.Read([]byte{1, 2, 3})
-		if err != nil {
-			t.Error(err)
-		}
-		if n != wantNum1 {
-			t.Error("unexpected result")
-		}
+		asserterror.EqualError(err, nil, t)
+		asserterror.Equal(n, wantNum1, t)
+
 		_, err = reader.Read([]byte{})
-		if err != wantNum2 {
-			t.Error("unexpected error")
-		}
-		info := reader.CheckCalls()
-		if len(info) != 0 {
-			t.Error("unexpected CheckCalls result")
-		}
+		asserterror.EqualError(err, wantErr2, t)
+
+		info := reader.Mock.CheckCalls()
+		asserterror.EqualDeep(info, []mok.MethodCallsInfo{}, t)
 	})
 
 	t.Run("Unregister", func(t *testing.T) {
 		var (
-			want   = UnknownMethodCallError{"Reader", "Read"}
-			reader = NewReaderMock().RegisterRead(
+			wantErr = mok.NewUnknownMethodCallError("Reader", "Read")
+			reader  = testdata.NewReaderMock().RegisterRead(
 				func(p []byte) (n int, err error) { return 0, nil },
 			)
 		)
-
-		reader.Unregister("Read")
+		reader.Mock.Unregister("Read")
 		_, err := reader.Read([]byte{})
-		if err.Error() != want.Error() {
-			t.Error("unexpected error")
-		}
+		asserterror.EqualError(err, wantErr, t)
 	})
 
 	t.Run("Unknown method call", func(t *testing.T) {
 		var (
-			want   = UnknownMethodCallError{"Reader", "ReadN"}
-			reader = NewReaderMock().RegisterRead(
+			wantErr = mok.NewUnknownMethodCallError("Reader", "ReadN")
+			reader  = testdata.NewReaderMock().RegisterRead(
 				func(p []byte) (n int, err error) { return 0, nil },
 			)
 		)
-
-		result, err := reader.Call("ReadN", []byte{})
-		if result != nil {
-			t.Error("unexpected result")
-		}
-		if err.Error() != want.Error() {
-			t.Error("unexpected error")
-		}
-		if want.MockName() != "Reader" {
-			t.Error("unexpected MockName")
-		}
-		if want.MethodName() != "ReadN" {
-			t.Error("unexpected MethodName")
-		}
+		result, err := reader.Mock.Call("ReadN", []byte{})
+		asserterror.EqualDeep(result, []any(nil), t)
+		asserterror.EqualError(err, wantErr, t)
+		asserterror.Equal(wantErr.MockName(), "Reader", t)
+		asserterror.Equal(wantErr.MethodName(), "ReadN", t)
 	})
 
 	t.Run("Unexpected call", func(t *testing.T) {
 		var (
-			want   = UnexpectedMethodCallError{"Reader", "Read"}
-			reader = NewReaderMock().RegisterRead(
+			wantErr = mok.NewUnexpectedMethodCallError("Reader", "Read")
+			reader  = testdata.NewReaderMock().RegisterRead(
 				func(p []byte) (n int, err error) { return 0, nil },
 			)
 		)
-
-		reader.Call("Read", []byte{})
-		result, err := reader.Call("Read", []byte{})
-		if result != nil {
-			t.Error("unexpected result")
-		}
-		if err.Error() != want.Error() {
-			t.Error("unexpected error")
-		}
-		if want.MockName() != "Reader" {
-			t.Error("unexpected MockName")
-		}
-		if want.MethodName() != "Read" {
-			t.Error("unexpected MethodName")
-		}
+		reader.Mock.Call("Read", []byte{})
+		result, err := reader.Mock.Call("Read", []byte{})
+		asserterror.EqualDeep(result, []any(nil), t)
+		asserterror.EqualDeep(err, wantErr, t)
+		asserterror.Equal(wantErr.MockName(), "Reader", t)
+		asserterror.Equal(wantErr.MethodName(), "Read", t)
 	})
 
 	t.Run("CheckCalls", func(t *testing.T) {
 		var (
-			reader = NewReaderMock().RegisterRead(
+			reader = testdata.NewReaderMock().RegisterRead(
 				func(p []byte) (n int, err error) { return 0, nil },
 			).RegisterRead(
 				func(p []byte) (n int, err error) { return 1, nil },
 			)
 		)
-
 		reader.Read([]byte{})
-		arr := reader.CheckCalls()
-		if len(arr) != 1 {
-			t.Error("unexpected CheckCalls result")
-		}
-		err := CheckMethodCallsInfo(arr[0], 2, 1)
-		if err != nil {
-			t.Error(err)
-		}
+		arr := reader.Mock.CheckCalls()
+		asserterror.Equal(len(arr), 1, t)
+		asserterror.EqualError(CheckMethodCallsInfo(arr[0], 2, 1), nil, t)
 	})
 
 	t.Run("Concurrent usage", func(t *testing.T) {
@@ -186,9 +105,9 @@ func TestMock(t *testing.T) {
 			wantNum1 = 10
 			wantNum2 = 20
 			wantNums = map[int]struct{}{wantNum1: {}, wantNum2: {}}
-			wantErr  = UnexpectedMethodCallError{"Reader", "Read"}
+			wantErr  = mok.NewUnexpectedMethodCallError("Reader", "Read")
 			wantErrs = map[string]struct{}{wantErr.Error(): {}}
-			reader   = NewReaderMock().RegisterRead(
+			reader   = testdata.NewReaderMock().RegisterRead(
 				func(p []byte) (n int, err error) { return wantNum1, nil },
 			).RegisterRead(
 				func(p []byte) (n int, err error) { return wantNum2, nil },
@@ -218,31 +137,35 @@ func TestMock(t *testing.T) {
 		for err := range errs {
 			delete(wantErrs, err.Error())
 		}
-		if len(wantNums) != 0 {
-			t.Error("unexpected num")
-		}
-		if len(wantErrs) != 0 {
-			t.Error("unexpected err")
-		}
-		arr := reader.CheckCalls()
-		if len(arr) != 0 {
-			t.Error("unexpected CheckCalls result")
-		}
+		asserterror.Equal(len(wantNums), 0, t)
+		asserterror.Equal(len(wantErrs), 0, t)
+
+		arr := reader.Mock.CheckCalls()
+		asserterror.EqualDeep(arr, []mok.MethodCallsInfo{}, t)
 	})
 
 	t.Run("Nil_param_caveat", func(t *testing.T) {
 		var (
-			writer = NeWriterToMock().RegisterWriteTo(
+			wantErr error = nil
+			writer        = testdata.NewWriterToMock().RegisterWriteTo(
 				func(w io.Writer) (n int64, err error) { return 0, nil })
 		)
 		_, err := writer.WriteTo(nil)
-		if err != nil {
-			t.Error(err)
-		}
+		asserterror.EqualError(err, wantErr, t)
 	})
+
+	t.Run("Should be able to mock an interface with a variadic method",
+		func(t *testing.T) {
+			var (
+				variadic = testdata.NewVariadicMock().RegisterProcess(
+					func(args ...int) {},
+				)
+			)
+			variadic.Process(1, 2, 3)
+		})
 }
 
-func CheckMethodCallsInfo(info MethodCallsInfo, expectedCalls,
+func CheckMethodCallsInfo(info mok.MethodCallsInfo, expectedCalls,
 	actualCalls int) error {
 	if info.MockName != "Reader" {
 		return errors.New("unexpected MockName")
